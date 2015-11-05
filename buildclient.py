@@ -8,7 +8,7 @@ import appdirs
 import sys
 import os
 
-APPLICATION = "WerkzeugBuildClient"
+APPLICATION = "WerkzeugBuildServer"
 AUTHOR = "jof.guru"
 
 
