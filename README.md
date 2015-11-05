@@ -1,4 +1,4 @@
-# csrbuildshortcuts
+# werkzeugbuildserver
 
 More documentation coming soon .. this needs testing.
 
