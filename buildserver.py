@@ -10,8 +10,8 @@ import os
 
 import appdirs
 
-APPLICATION="WerkzeugBuildServer"
-AUTHOR="jof.guru"
+APPLICATION = "WerkzeugBuildServer"
+AUTHOR = "jof.guru"
 
 
 class BuildRequestServer(SocketServer.TCPServer):
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         if v != parser.get_default(k) or not config.has_option("server", k):
             config.set("server", str(k), str(v))
 
-    if config.get("server", "key") == "None":
+    if config.get("server", "key") in [None, "None"]:
         sys.stderr.write("Error: A shared secret key must be specified!\n")
         sys.exit(1)
 
