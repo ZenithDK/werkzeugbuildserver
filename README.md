@@ -1,9 +1,8 @@
 # csrbuildshortcuts
 
-build_current.sh and run_current.sh are shellscripts I've added to my path and then created Vim shortcuts for:
-```VimL
-map <Leader>c :silent !build_current.sh<CR>
-map <Leader>r :silent !run_current.sh<CR>
-```
+More documentation coming soon .. this needs testing.
 
-build.py is a script I execute on the Windoze machine that watches the files touched by the shellscripts.
+```VimL
+map <Leader>c :!buildclient.py<CR>
+map <Leader>r :!buildclient.py xide<CR>
+```
