@@ -69,7 +69,7 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
             process = subprocess.Popen(
                 ["../werkzeug/wkz.exe", target],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
+                stderr=subprocess.STDOUT)
         except OSError:
             yield "Could not find Werkzeug at the specified repo\n"
             return
