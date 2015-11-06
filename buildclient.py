@@ -27,6 +27,11 @@ class BuildClient:
         try:
             buildserver_socket.connect((hostname, port))
             buildserver_socket.send("%s %s %s\n"%(key, project, target))
+            while True:
+                line = buildserver_socket.recv(1024)
+                if not line:
+                    break
+                print line.strip()
         except socket.error, e:
             sys.stderr.write("Connection error: %s\n"%e)
             sys.exit(1)
