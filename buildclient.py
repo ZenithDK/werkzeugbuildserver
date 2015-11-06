@@ -106,7 +106,8 @@ if __name__ == "__main__":
     if not config.has_section(args.remote):
         config.add_section(args.remote)
 
-    config.set("defaults", "remote", args.remote)
+    if args.remote != parser.get_default("remote") or not config.has_option("defaults", "remote"):
+        config.set("defaults", "remote", args.remote)
 
     # Please ignore next few lines. I'll format this properly. Like.. Never.
     if args.port != parser.get_default("port") or not config.has_option(config.get("defaults", "remote"), "port"):
