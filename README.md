@@ -29,8 +29,8 @@ If you want to build a different target (default is "all"), like xide, you suppl
 Lastly, you could also create some Vim shortcuts (which is actually the whole purpose of this project) and add them to your .vimrc:
 
 ```VimL
-map <Leader>c :!buildclient.py<CR>
-map <Leader>r :!buildclient.py -t xide<CR>
+map <Leader>c :!python c:\werkzeugbuildserver\buildclient.py<CR>
+map <Leader>r :!python c:\werkzeugbuildserver\buildclient.py -t xide<CR>
 ```
 
 ## Defining exceptions
