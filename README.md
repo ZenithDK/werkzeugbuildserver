@@ -41,6 +41,11 @@ map <Leader>r :!python c:\werkzeugbuildserver\buildclient.py wkz xide<CR>
 map <Leader>u :!python c:\werkzeugbuildserver\buildclient.py svn update<CR>
 ```
 
+Since you might want to use Vim's internal pager for commands such as svn update (to scroll through the entire output), you could use something like this instead:
+```VimL
+map <Leader>u :echo system('python c:\werkzeugbuildserver\buildclient.py svn update')<CR>
+```
+
 ## Defining exceptions
 
 Some projects have some exceptions with regards to how they're built.
