@@ -37,9 +37,9 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
     project using Werkzeug.
     """
 
-    def build(self, repo, target):
+    def build(self, repo, subsystem, subcommand):
         """
-        Execute the build target on the project at the specified path
+        Execute the subsystem (wkz or svn) with the specified subcommand (or target)
         """
         configuration = {
             "application" : "application"
@@ -53,10 +53,16 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
                 except ConfigParser.NoOptionError:
                     pass
 
+        # { subsystem-name : [executable, path-to-append-after-project-dir] }
+        subsystem_constants = {
+            "wkz" : ["../werkzeug/wkz.exe", configuration["application"]],
+            "svn" : ["svn", ""]
+        }
+
         full_application_path = os.path.join(
             self.server.base_directory,
             repo,
-            configuration["application"]
+            subsystem_constants[subsystem][1]
         )
 
         try:
@@ -67,17 +73,17 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
 
         try:
             process = subprocess.Popen(
-                ["../werkzeug/wkz.exe", target],
+                [subsystem_constants[subsystem][0], subcommand],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         except OSError:
-            yield "Could not find Werkzeug at the specified repo\n"
+            yield "Could not run executable.\n"
             return
         while True:
-            stdout_line = process.stdout.readline()
-            if not stdout_line:
+            stdout_byte = process.stdout.read(1)
+            if not stdout_byte:
                 break
-            yield stdout_line
+            yield stdout_byte
 
 
     def handle(self):
@@ -85,7 +91,7 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
         Overidden method that gets executed on incoming connections.
         """
         try:
-            key, repo, target = self.request.recv(1024).strip().split()
+            key, repo, subsystem, subcommand = self.request.recv(1024).strip().split()
         except ValueError:
             self.wfile.write("Incorrect syntax\n")
             return
@@ -94,8 +100,8 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
             self.wfile.write("Incorrect key\n")
             return
 
-        for outputline in self.build(repo, target):
-            self.wfile.write(outputline)
+        for outputbyte in self.build(repo, subsystem, subcommand):
+            self.wfile.write(outputbyte)
 
 if __name__ == "__main__":
 

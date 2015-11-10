@@ -22,16 +22,16 @@ class BuildClient:
         return os.path.abspath(os.path.join(*path))
 
     @staticmethod
-    def request_build(hostname, port, key, project, target):
+    def request_build(hostname, port, key, project, subsystem, subcommand):
         buildserver_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             buildserver_socket.connect((hostname, port))
-            buildserver_socket.send("%s %s %s\n"%(key, project, target))
+            buildserver_socket.send("%s %s %s %s\n"%(key, project, subsystem, subcommand))
             while True:
-                line = buildserver_socket.recv(1024)
-                if not line:
+                recvbyte = buildserver_socket.recv(1)
+                if not recvbyte:
                     break
-                print line.strip()
+                sys.stdout.write(recvbyte)
         except socket.error, e:
             sys.stderr.write("Connection error: %s\n"%e)
             sys.exit(1)
@@ -47,6 +47,20 @@ if __name__ == "__main__":
         prog=sys.argv[0],
         description="Werkzeug build-client",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    parser.add_argument(
+        "subsystem",
+        help="Specify subsystem, wkz or svn",
+        nargs="?",
+        default="wkz"
+    )
+
+    parser.add_argument(
+        "subcommand",
+        help="target for wkz or command for svn",
+        nargs="?",
+        default="all"
     )
 
     parser.add_argument(
@@ -77,13 +91,6 @@ if __name__ == "__main__":
         "--key",
         dest="key",
         help="Specify the authentication shared secret key",
-    )
-
-    parser.add_argument(
-        "-t",
-        "--target",
-        help="The build target",
-        default="all"
     )
 
     parser.add_argument(
@@ -150,5 +157,6 @@ if __name__ == "__main__":
         int(config.get(config.get("defaults", "remote"), "port")),
         config.get(config.get("defaults", "remote"), "key"),
         project_name,
-        args.target
+        args.subsystem,
+        args.subcommand
     )
