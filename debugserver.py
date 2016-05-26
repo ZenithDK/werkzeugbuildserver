@@ -51,7 +51,7 @@ class DebugRequestServer(SocketServer.TCPServer):
 # in the debugclient.py to make a special mode where it can run standalone (no
 # TCP involved) if the user just wants to run it locally on his/her Wintendo machine.
 class VmDebugLoggerWrapper():
-    def __init__(self, adk_path="C:\\ADK4.0.0\\tools\\bin\\vmdebuglogger.exe", usb_port=0):
+    def __init__(self, adk_path="C:\\ADK4.0.0", usb_port=0):
         self.full_path = os.path.join(
                 adk_path,
                 "tools",
