@@ -59,6 +59,10 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
             "svn" : ["svn", ""]
         }
 
+        if subsystem not in subsystem_constants:
+            yield "Error: requested subsystem '{}' is not in valid list of subsystems: {}\n".format(subsystem, subsystem_constants.keys())
+            return
+
         full_application_path = os.path.join(
             self.server.base_directory,
             repo,
@@ -67,7 +71,7 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
 
         try:
             os.chdir(full_application_path)
-        except OSError, e:
+        except OSError as e:
             yield "Error: Unable to chdir: %s\n"%e
             return
 
@@ -76,8 +80,8 @@ class BuildRequestHandler(SocketServer.StreamRequestHandler):
                 [subsystem_constants[subsystem][0], subcommand],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
-        except OSError:
-            yield "Could not run executable.\n"
+        except OSError as e:
+            yield "Error: Could not run executable: {}\n".format(e)
             return
         while True:
             stdout_byte = process.stdout.read(1)
@@ -159,7 +163,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Save the supplied configuration as default",
         default=False,
-        
+
     )
     args = parser.parse_args(sys.argv[1:])
 
@@ -199,4 +203,8 @@ if __name__ == "__main__":
         config.get("server", "key")
     )
 
-    server.serve_forever()
+    print('buildserver now running - waiting for client input')
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt as e:
+        print('User interrupted execution, exiting')
