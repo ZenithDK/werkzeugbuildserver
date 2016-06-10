@@ -147,7 +147,8 @@ if __name__ == "__main__":
 
     if highest_svn == "":
         # WHERE'S YOUR GOD NOW???
-        sys.stderr.write("Could not determine project/repo name\n")
+        sys.stderr.write("Could not determine project/repo name.\n"
+            "Make sure to run the client within the path of your configured project root.\n")
         sys.exit(1)
 
     project_name = os.path.basename(highest_svn)
