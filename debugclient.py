@@ -169,7 +169,7 @@ if __name__ == "__main__":
         "--port",
         dest="port",
         help="Remote port for DebugServer",
-        default="7654"
+        default="7655"
     )
 
     parser.add_argument(
