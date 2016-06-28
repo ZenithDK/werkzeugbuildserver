@@ -1,231 +1,199 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import socket
-import argparse
+import click
 import ConfigParser
-import appdirs
-import sys
 import os
-import re
-from colored import fg, attr
+import logging
+import socket
+import sys
 
-APPLICATION = "WerkzeugBuildServer"
+from debugserver import VmDebugLoggerWrapper
+
+APPLICATION = "WerkzeugBuildClient"
 AUTHOR = "jof.guru"
 
+config_filename = click.get_app_dir(APPLICATION, AUTHOR)
+config_parser = ConfigParser.ConfigParser()
 
-class DebugClient:
+# Initialize logging
+#logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+logging.basicConfig(format='%(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.DEBUG# if debug else logging.ERROR if quiet else logging.INFO)
+)
+logger = logging.getLogger(__name__)
 
-    def __init__(self, disable_color=False, state_debug_only=False):
-        self.disable_color = disable_color
-        self.state_debug_only = state_debug_only
+class DebugClientRemote:
+    debugserver_socket = None
 
-    def handleWarnInfo(self, line):
-        colors = {
-            "ERROR:" : 9,
-            "WARN:" : 11,
-            "INFO:" : 2,
-        }
-        if self.disable_color:
-            sys.stderr.write(line)
-        else:
-            sys.stderr.write("%s%s%s"%(fg(colors[line.split()[0]]), line, attr(0)))
-        sys.stderr.flush()
+    def request_debug(self, hostname, port, key):
+        self.debugserver_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket_file = None
 
-    def handleOnCharChannel(self, line):
-        clean_line  = re.sub('[^\x20-\x7e\n\r]', '', line.strip())
-        if len(clean_line) > 0:
-            if self.state_debug_only:
-                if re.match("^&[a-z]:", clean_line):
-                    print clean_line
-            else:
-                if len(clean_line.strip()) > 0:
-                    sys.stdout.write("%s\n"%clean_line)
-            sys.stdout.flush()
-
-
-    def request_debug(self, hostname, port, key, usb_port, verbose=False):
-        printf_keywords = {
-            #"On ch" : self.handleOnCharChannel,
-            "WARN:" : self.handleWarnInfo,
-            "INFO:" : self.handleWarnInfo,
-            "ERROR" : self.handleWarnInfo
-        }
-        debugserver_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        logger.info('remote request_debug')
         try:
-            debugserver_socket.connect((hostname, port))
-            debugserver_socket.send("%s %s\n"%(key, usb_port))
-            socket_file = debugserver_socket.makefile()
-            while True:
-                current_buffer = []
-                while True:
-                    line = socket_file.readline()
-                    if not line:
-                        sys.stderr.write("Error: Socket closed.\n")
-                        sys.exit(1)
-                    if len(line.strip()) == 0:
-                        break
-                    current_buffer.append(line)
-
-                if verbose:
-                    for current_line in current_buffer:
-                        sys.stdout.write(current_line)
-                else:
-                    plain_buffer = []
-                    html_chunk = False
-                    while len(current_buffer) > 0:
-                        current_line = current_buffer.pop(0)
-                        if not html_chunk and current_line[:5] in printf_keywords.keys():
-                            printf_keywords[current_line[:5]](current_line)
-                        elif not html_chunk and "font color" in current_line:
-                            html_chunk = True
-                            continue
-                        elif html_chunk and "/font" in current_line:
-                            html_chunk = False
-                            continue
-                        elif html_chunk:
-                            continue
-                        elif "On" in current_line and "channel" in current_line and "0x" in current_line:
-                            current_line = current_line.replace("On char channel: 0x0 ", "")
-                            line_split = current_line.split()
-                            if line_split[0] == "On" and line_split[2] == "channel:" and line_split[3][:2] == "0x":
-                                continue
-                            else:
-                                plain_buffer.append(current_line)
-                        else:
-                            plain_buffer.append(current_line)
-                    for current_line in plain_buffer:
-                        self.handleOnCharChannel(current_line)
-
-        except socket.error, e:
-            sys.stderr.write("Connection error: %s\n"%e)
+            self.debugserver_socket.connect((hostname, port))
+            self.debugserver_socket.send("{}\n".format(key))
+            self.socket_file = self.debugserver_socket.makefile()
+        except socket.error as e:
+            logger.error("Connection error: {}".format(e))
             sys.exit(1)
-        finally:
-            debugserver_socket.close()
-        
 
-if __name__ == "__main__":
+        return self.socket_file
 
-    config_filename = appdirs.appdirs.user_config_dir(APPLICATION, AUTHOR)
-    
-    parser = argparse.ArgumentParser(
-        prog=sys.argv[0],
-        description="Werkzeug debug-client",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+    def stop_debug(self):
+        logger.info('remote stop_debug')
+        if self.debugserver_socket is not None:
+            self.debugserver_socket.close()
+            self.debugserver_socket = None
+        if self.socket_file is not None:
+            self.socket_file.close()
+            self.socket_file = None
 
-    parser.add_argument(
-        "-u",
-        "--usb",
-        dest="usb",
-        help="CSR USBSPI port number",
-        default="0"
-    )
+class DebugClientLocal:
+    vdlw = None
+    debug_stdout = None
 
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="verbose",
-        action="store_true",        
-        help="Print all available debug information",
-        default=False
-    )
+    def request_debug(self, adk, usb):
+        logger.info('DebugClientLocal.request_debug()')
+        # Casting usb_port to int and back to string is just a basic simple
+        # security check, make sure the parameter is only an int and not command
+        # injection.
+        self.vdlw = VmDebugLoggerWrapper(adk_path=adk, usb_port=usb)
+        self.debug_stdout = self.vdlw.runDebug()
 
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        dest="quiet",
-        action="store_true",
-        help="Quiet. Suppress all output on stdout except state-event debug messages.",
-        default=False
-    )
+        return self.debug_stdout
 
-    parser.add_argument(
-        "-d",
-        "--disable",
-        dest="disable_color",
-        action="store_true",
-        help="Disable VT100 colors in output",
-        default=False
-    )
+    def stop_debug(self):
+        logger.info('DebugClientLocal.stop_debug()')
+        self.vdlw.terminate()
+        self.debug_stdout = None
 
-    parser.add_argument(
-        "-c",
-        "--config",
-        help="Specify configuration file to use",
-        default="%s/debugclient.ini"%config_filename
-    )
 
-    parser.add_argument(
-        "-r",
-        "--remote",
-        dest="remote",
-        help="Remote hostname/ip for DebugServer",
-        default="localhost"
-    )
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
-    parser.add_argument(
-        "-p",
-        "--port",
-        dest="port",
-        help="Remote port for DebugServer",
-        default="7655"
-    )
-
-    parser.add_argument(
-        "-k",
-        "--key",
-        dest="key",
-        help="Specify the authentication shared secret key",
-    )
-
-    parser.add_argument(
-        "-s",
-        "--save",
-        dest="save",
-        action="store_true",
+@click.group(context_settings=CONTEXT_SETTINGS)
+@click.option('-c', '--config',
+              type=click.Path(exists=False, dir_okay=False),
+              help="Specify configuration file to use",
+              default="{}/debugclient.ini".format(config_filename),
+              required=False)
+@click.option('-s', '--save',
         help="Save the supplied configuration as default",
-        default=False
-    )
+        default=False)
+@click.option('--porcelain', is_flag=True)
+@click.pass_context
+def cli(ctx, config, save, porcelain):
+    logger.info('CLI running')
+    config_parser.read(config)
 
-    args = parser.parse_args(sys.argv[1:])
+    if not config_parser.has_section("defaults"):
+        config_parser.add_section("defaults")
 
-    config = ConfigParser.ConfigParser()
-    config.read(args.config)
-
-    if not config.has_section("defaults"):
-        config.add_section("defaults")
-
-    if not config.has_section(args.remote):
-        config.add_section(args.remote)
-
-    if args.remote != parser.get_default("remote") or not config.has_option("defaults", "remote"):
-        config.set("defaults", "remote", args.remote)
-
-    # Please ignore next few lines. I'll format this properly. Like.. Never.
-    if args.port != parser.get_default("port") or not config.has_option(config.get("defaults", "remote"), "port"):
-        config.set(args.remote, "port", args.port)
-
-    if args.key != None:
-        config.set(args.remote, "key", args.key)
-
-    if not config.has_option(config.get("defaults", "remote"), "key") or config.get(config.get("defaults", "remote"), "key") in [None, "None"]:
-        sys.stderr.write("Error: A shared secret key must be specified!\n")
-        sys.exit(1)
-
-    if args.save:
+    # TODO: This is done at the wrong time, needs to be done AFTER local/remote has been called
+    # TODO: Need to check that the provided value is different from the default, if then, store value in config, only save if -s is provided
+    # Generic config settings
+    if save:
         try:
-            os.makedirs(os.path.dirname(args.config))
+            os.makedirs(os.path.dirname(config_parser))
         except:
             pass
-        with open(args.config, "w") as configfile:
-            config.write(configfile)
+        with open(config_parser, "w") as configfile:
+            config_parser.write(configfile)
 
-    debugClient = DebugClient(args.disable_color, args.quiet)
-    debugClient.request_debug(
-        config.get("defaults", "remote"),
-        int(config.get(config.get("defaults", "remote"), "port")),
-        config.get(config.get("defaults", "remote"), "key"),
-        args.usb,
-        args.verbose
-    )
+
+@cli.command()
+@click.option('-u', '--usb',
+              help="CSR USBSPI port number",
+              default=0,
+              show_default=True,
+              required=False)
+@click.option('-a', '--adk',
+              help="The base directory for the ADK",
+              show_default=True,
+              default=os.path.join("C:/", "ADK4.0.0"),
+              required=False)
+@click.pass_context
+def local(ctx, usb, adk):
+    logger.info('local running')
+
+    # Click has no way of retrieving the default values for commands, so resort to this hackery
+    #default_dict = dict(zip([command.name for command in ctx.command.params], [command.default for command in ctx.command.params]))
+    #if usb != default_dict["usb"] and not config_parser.has_option("defaults", "usb"):
+    if not config_parser.has_option("defaults", "usb"):
+        config_parser.set("defaults", "usb", usb)
+
+    #if adk != default_dict["adk"] and not not config_parser.has_option("defaults", "adk"):
+    if not config_parser.has_option("defaults", "adk"):
+        config_parser.set("defaults", "adk", adk)
+
+    debug_client = DebugClientLocal()
+    handle = debug_client.request_debug(adk, usb)
+    logger.info('local done')
+    process_handle(handle, debug_client)
+
+@cli.command()
+@click.option('-p', '--port',
+              help="Remote port for DebugServer",
+              show_default=True,
+              default='7655')
+@click.option('-k', '--key',
+              help="Specify the authentication shared secret key")
+@click.argument('ip_address',
+              default="127.0.0.1",
+              required=False)
+@click.pass_context
+def remote(ctx, port, key, ip_address):
+    """Connect debugclient to remote debugserver.
+
+    [IP_ADDRESS] specifies the hostname/ip of the remote debugserver."""
+    logger.info('remote running')
+
+    # Config settings for 'ip_address'
+    if not config_parser.has_section(ip_address):
+        config_parser.add_section(ip_address)
+
+    if not config_parser.has_option("defaults", "remote"):
+        config_parser.set("defaults", "remote", ip_address)
+
+    if not config_parser.has_option(config_parser.get("defaults", "remote"), "port"):
+        config_parser.set(ip_address, "port", port)
+
+    if key != None:
+        config_parser.set(ip_address, "key", key)
+
+    if (not config_parser.has_option(config_parser.get("defaults", "remote"), "key")
+        or config_parser.get(config_parser.get("defaults", "remote"), "key") in [None, "None"]):
+        logger.error("A shared secret key must be specified!")
+        sys.exit(1)
+
+    debug_client = DebugClientRemote()
+    handle = debug_client.request_debug(
+        config_parser.get("defaults", "remote"),
+        int(config_parser.get(config_parser.get("defaults", "remote"), "port")),
+        config_parser.get(config_parser.get("defaults", "remote"), "key"))
+    logger.info('remote done')
+    process_handle(handle, debug_client)
+
+
+def process_handle(handle, debug_client):
+    logger.info('process_handle running')
+
+    try:
+        while True:
+            line = handle.readline()
+            if not line:
+                logger.error("Socket closed.")
+                sys.exit(1)
+            logger.info(line.strip())
+    except socket.error as e:
+        logger.error("Connection error: {}".format(e))
+    finally:
+        handle.close()
+        debug_client.stop_debug()
+
+    logger.info('process_handle done')
+
+if __name__ == "__main__":
+    cli()
